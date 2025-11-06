@@ -166,6 +166,45 @@ def meter_last(user_id: int = Query(..., ge=1), db: Session = Depends(get_db)) -
     prod, cons, ts = row
     return {"user_id": user_id, "production_kwh": float(prod), "consumption_kwh": float(cons), "ts": int(ts)}
 
+@app.get("/meter/series", tags=["meter"])
+def meter_series(
+    user_id: int = Query(..., ge=1),
+    hours: int = Query(12, ge=1, le=72),
+    db: Session = Depends(get_db),
+):
+    """
+    Return last {hours} hours of meter samples for user.
+    Response: { user_id, hours, samples: [{ts, production_kwh, consumption_kwh, surplus_kwh}] }
+    """
+    now = int(time.time())
+    since_ts = now - hours * 3600
+    rows = services.list_meter_series(db, user_id=user_id, since_ts=since_ts)
+    samples = [
+        {
+            "ts": ts,
+            "production_kwh": prod,
+            "consumption_kwh": cons,
+            "surplus_kwh": max(0.0, round(prod - cons, 4)),
+        }
+        for (ts, prod, cons) in rows
+    ]
+    return {"user_id": user_id, "hours": hours, "samples": samples}
+
+
+@app.get("/provider/series", tags=["market"])
+def provider_series(
+    hours: int = Query(12, ge=1, le=72),
+):
+    """
+    Return hourly provider prices for the past {hours} hours using the schedule/surge.
+    Response: { hours, points: [{ts, price_eur_per_kwh}] }
+    """
+    points = [
+        {"ts": ts, "price_eur_per_kwh": price}
+        for (ts, price) in services.provider_series_past_hours(hours)
+    ]
+    return {"hours": hours, "points": points}
+
 
 # -----------------------------------------------------------------------------
 # Marketplace
@@ -261,3 +300,45 @@ def chain_trade_confirm(payload: ChainTradeConfirmIn, db: Session = Depends(get_
     tr.tx_hash = payload.tx_hash
     db.commit()
     return {"ok": True, "trade_id": payload.trade_id, "tx_hash": payload.tx_hash}
+    
+    # ---[ 12h time-series endpoints ]--------------------------------------------
+
+@app.get("/meter/series", tags=["meter"])
+def meter_series(
+    user_id: int = Query(..., ge=1),
+    hours: int = Query(12, ge=1, le=72),
+    db: Session = Depends(get_db),
+):
+    """
+    Return last {hours} hours of meter samples for user.
+    Response: { user_id, hours, samples: [{ts, production_kwh, consumption_kwh, surplus_kwh}] }
+    """
+    now = int(time.time())
+    since_ts = now - hours * 3600
+    rows = services.list_meter_series(db, user_id=user_id, since_ts=since_ts)
+    samples = [
+        {
+            "ts": ts,
+            "production_kwh": prod,
+            "consumption_kwh": cons,
+            "surplus_kwh": max(0.0, round(prod - cons, 4)),
+        }
+        for (ts, prod, cons) in rows
+    ]
+    return {"user_id": user_id, "hours": hours, "samples": samples}
+
+
+@app.get("/provider/series", tags=["market"])
+def provider_series(
+    hours: int = Query(12, ge=1, le=72),
+):
+    """
+    Return hourly provider prices for the past {hours} hours using the schedule/surge.
+    Response: { hours, points: [{ts, price_eur_per_kwh}] }
+    """
+    points = [
+        {"ts": ts, "price_eur_per_kwh": price}
+        for (ts, price) in services.provider_series_past_hours(hours)
+    ]
+    return {"hours": hours, "points": points}
+

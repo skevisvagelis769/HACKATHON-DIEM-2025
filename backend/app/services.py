@@ -180,12 +180,36 @@ def compute_latest_surplus(db: Session, user_id: int) -> float:
     return round(max(0.0, prod - cons), 4)
 
 
+def compute_surplus_last_hours(db: Session, user_id: int, hours: int = 12) -> float:
+    """
+    Stored surplus over the last {hours} hours:
+    Sum of max(0, production - consumption) for each sample in the window.
+    """
+    now = int(time.time())
+    since_ts = now - hours * 3600
+    rows = list_meter_series(db, user_id=user_id, since_ts=since_ts)
+    total = 0.0
+    for (ts, prod, cons) in rows:
+        total += max(0.0, prod - cons)
+    return round(total, 4)
+
+
 def get_user_status(db: Session, user_id: int) -> dict:
+    """
+    Return wallet balance and a realistic 'stored_surplus_kwh' = sum of positive
+    (production - consumption) over the last 12 hours (windowed storage).
+    """
     user = db.get(User, user_id)
     if not user:
         raise ValueError("User not found")
-    surplus = compute_latest_surplus(db, user_id)
-    return {"user_id": user_id, "stored_surplus_kwh": surplus, "balance_eur": round(user.balance_eur, 4)}
+
+    stored_12h = compute_surplus_last_hours(db, user_id, hours=12)
+    return {
+        "user_id": user_id,
+        "stored_surplus_kwh": stored_12h,
+        "balance_eur": round(user.balance_eur, 4),
+    }
+
 
 
 # ============================================================================
@@ -343,3 +367,34 @@ def list_trades_for_user(db: Session, user_id: int, limit: int = 50) -> List[Tra
         .order_by(Trade.ts.desc())
         .limit(limit)
     ).all()
+    
+
+def list_meter_series(db: Session, user_id: int, since_ts: int) -> List[Tuple[int, float, float]]:
+    """
+    Return [(ts, production_kwh, consumption_kwh)] ascending by ts for user since 'since_ts'.
+    """
+    rows = db.execute(
+        select(MeterSample.ts, MeterSample.production_kwh, MeterSample.consumption_kwh)
+        .where(MeterSample.user_id == user_id, MeterSample.ts >= since_ts)
+        .order_by(MeterSample.ts.asc())
+    ).all()
+    # rows: List[Row(tuple)], convert to plain tuples
+    return [(int(ts), float(prod), float(cons)) for (ts, prod, cons) in rows]
+
+
+def provider_series_past_hours(hours: int) -> List[Tuple[int, float]]:
+    """
+    Produce hourly provider prices for the past 'hours' hours (inclusive of current hour),
+    using the existing schedule + optional surge window.
+    Returns [(ts, price_eur_per_kwh)] with ts at the start of each hour.
+    """
+    now = int(time.time())
+    # Align to current hour start
+    hour_start = now - (now % 3600)
+    out: List[Tuple[int, float]] = []
+    for i in range(hours - 1, -1, -1):
+        ts = hour_start - i * 3600
+        price = provider_price_eur_per_kwh_now(ts)
+        out.append((ts, float(price)))
+    return out
+
