@@ -12,16 +12,22 @@
   <header class="topbar">
     <div class="brand">⚡ Smart Energy</div>
 
-    <nav class="nav">
-      <button class="nav-btn active" data-page="dashboard">Dashboard</button>
-      <button class="nav-btn" data-page="marketplace">Marketplace</button>
-      <button class="nav-btn" data-page="sell">Sell</button>
-    </nav>
+    <!-- This container holds the centered navigation -->
+    <div class="nav-container">
+      <nav class="nav">
+        <button class="nav-btn active" data-page="dashboard">Dashboard</button>
+        <button class="nav-btn" data-page="marketplace">Marketplace</button>
+        <button class="nav-btn" data-page="sell">Sell</button>
+      </nav>
 
-    <div class="user-switch">
-      <label for="userSelect">User</label>
-      <select id="userSelect" aria-label="Select user"></select>
+      <div class="user-switch">
+        <label for="userSelect">User</label>
+        <select id="userSelect" aria-label="Select user"></select>
+      </div>
     </div>
+
+    <!-- Empty div for grid alignment -->
+    <div></div>
   </header>
 
   <main>
